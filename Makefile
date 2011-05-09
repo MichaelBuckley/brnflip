@@ -9,7 +9,7 @@ brnflip: brnflip.o cli.o
 	$(LD) $(LDLAGS) -o brnflip brnflip.o cli.o
 
 *.o: *.c
-	$(CC) ($CCFLAGS) -o *.o *.c
+	$(CC) $(CFLAGS) -c *.c
 
 clean:
 	rm brnflip

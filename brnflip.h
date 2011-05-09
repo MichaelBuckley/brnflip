@@ -1,5 +1,5 @@
 /*
- *  Copyright 2007 Michael Buckley
+ *  Copyright 2007-2011 Michael Buckley
  *
  *  This program is free software; you can redistribute it and/or modify it
  *  under the terms of the GNU General Public License as published by the Free
@@ -15,54 +15,54 @@
  *  with this program; if not, If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef __BRNCONVERT_H__
-#define __BRNCONVERT_H__
+#ifndef __BRNFLIP_H__
+#define __BRNFLIP_H__
 
 #define MEGAHAL_UNKNOWN_INPUT -1
 #define MEGAHAL_UNSUPPORTED_ENDIANESS -2
 
 typedef enum
 {
-    MEGAHAL_UNKNOWN_FILETYPE,
-    MEGAHAL_BIG_ENDIAN,
-    MEGAHAL_LITTLE_ENDIAN
+    BRNFLIP_NO_ERROR     =  0,
+    MEGAHAL_INVALID_FILE = -1,
+} brnflip_error;
+
+typedef enum
+{
+    MEGAHAL_UNKNOWN_FILETYPE = 0,
+    MEGAHAL_BIG_ENDIAN       = 1,
+    MEGAHAL_LITTLE_ENDIAN    = 2
 } megahal_filetype;
 
-/* This function takes as input a buffer with the contents of a MegaHALv8 brain
- * file and automatically determines its endianess. It then converts the buffer
- * in place to the target endianness if necessary.
- *
- * Because MegaHALv8 brains do not specify their endianess, this function makes
- * a best guess as to the endianess of the buffer. Although it cannot be 100%
- * accurate, it should be accurate enough to cover all real-world cases. If for
- * some reason this function returns 0 without making a conversion when the
- * file's endianess and the target endianess are different, it has guessed
- * incorrectly. The function forceMegahalConversion can be used to successfully
- * convert these files.
- *
- * This function will only run on little-endian machines or big-endian machines.
- * I am currently unaware of any port of MegaHAL to middle-endian machines, or
- * to any machines with more exotic endianesses. The function
- * forceMegahalConversion can be used to force a conversion from big-endian to
- * little endian or vice-versa on these machines, but there is no function to
- * convert MegaHALv8 brains to or from any other endianess. If this function is
- * called on an unsupported machine, no conversion will be performed at the 
- *
- * However, if you are interested in a converter for an endianess not currently
- * supported, I would be happy to help. You can contact me at
- * http://angrymen.org/contact/
- *
- * The function returns 0 on success, MEGAHAL_UNKNOWN_INPUT if the buffer is not
- * a MegaHALv8 brain, and MEGAHAL_UNSUPPORTED_ENDIANESS if the machine is
- * neither big-endian or little-endian.
- */
-int convertMegahalBrain(uint8_t* brain, long brainLen, megahal_filetype target);
+#if BYTE_ORDER == BIG_ENDIAN
+#define NATIVE_MEGAHAL_ENDIANESS MEGAHAL_BIG_ENDIAN
+#elif BYTE_ORDER == LITTLE_ENDIAN
+#define NATIVE_MEGAHAL_ENDIANESS MEGAHAL_LITTLE_ENDIAN
+#else
+#define NATIVE_MEGAHAL_ENDIANESS MEGAHAL_UNKNOWN_FILETYPE
+#endif
 
-/* This function flips the endianess of a buffer. It must perform one check to
- * perform the conversion, but otherwise does not check to ensure that the
- * buffer is a valid MegaHALv8 brain. This function can be run on any machine,
- * but will only convert from big-endian to little-endian and vice-versa.
+/* This function takes as input a buffer with the contents of a MegaHAL brain
+ * file and attempts to determine its endianess, placing the result into
+ * outFileType. If it is unable to determine the endianess, or if the input
+ * buffer is not a valid MegaHAL brain, it will return MEGAHAL_INVALID_INPUT and
+ * place MEGAHAL_UNKNOWN_FILETYPE into outFiletype.
  */
-int forceMegahalConversion(uint8_t* brain, long brainLen);
+
+brnflip_error brnflip_detect_endianess(
+    char*             brain,
+    size_t            brainLength,
+    megahal_filetype* outFiletype
+);
+
+/* This function flips the endianess of a buffer in-place. It must perform one
+ * check to complete the conversion, but otherwise does not check to ensure that
+ * the buffer is a valid MegaHAL brain.
+ */
+
+brnflip_error brnflip_flip_buffer(
+    char*  brain,
+    size_t brainLength
+);
 
 #endif

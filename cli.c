@@ -126,7 +126,7 @@ int main(int argc, char* argv[])
         if(errno == EOVERFLOW){
             printf("The input file is too large: %s\n", input);
         }else if(errno == ESPIPE){
-            printf("The input file is not a regular file: %s\n", input);
+            printf("The input file is not seekable: %s\n", input);
         }else{
             printf("Unknown error opening input file: %s\n", input);
         }
@@ -140,29 +140,31 @@ int main(int argc, char* argv[])
 
     long brainLen = ftell(f);
     fseek(f, 0, SEEK_SET);
-    uint8_t* buffer = (uint8_t*) malloc(brainLen);
+    char* buffer = (char*) malloc(brainLen);
     fread(buffer, brainLen, 1, f);
     fclose(f);
 
-    int error;
+    brnflip_error error;
 
     if(force == 1){
-        error = forceMegahalConversion(buffer, brainLen);
+        error = brnflip_flip_buffer(buffer, brainLen);
     }else{
         #if !BYTE_ORDER == BIG_ENDIAN && !BYTE_ORDER == LITTLE_ENDIAN
         puts("Your machine appears to be neither big nor little-endian.");
         puts("This program will only run on big or little-endian machines.");
         puts("You can use the --force option to force a conversion.");
         puts("This will only convert between big and little-endian.");
-        puts("I would be glad develop a converter that works on your machine.");
-        puts("Please contact me at http://angrymen.org/contact/");
         return 0;
         #else
-        error = convertMegahalBrain(buffer, brainLen, target);
+        megahal_filetype endianess;
+        error = brnflip_detect_endianess(buffer, brainLen, &endianess);
+        if (endianess != NATIVE_MEGAHAL_ENDIANESS) {
+            error = brnflip_flip_buffer(buffer, brainLen);
+        }
         #endif
     }
 
-    if(error != 0){
+    if(error != BRNFLIP_NO_ERROR){
         if(error == MEGAHAL_UNKNOWN_INPUT){
             printf("Input file does not appear to be a brain: %s\n", input);
         }else{
@@ -176,7 +178,7 @@ int main(int argc, char* argv[])
         return 0;
     }
 
-    f = fopen(output, "w");
+    f = fopen(output, "wb");
     if(f == NULL){
         printf("Unable to open output file: %s\n", output);
         #ifdef WIN32
