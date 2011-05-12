@@ -47,7 +47,7 @@
  * uint16_t | symbol      | The index in the dictionary of the word for this
  *          |             | node
  * uint32_t | usage       | Node data
- * uint32_t | count       | Node data
+ * uint16_t | count       | Node data
  * uint16_t | branch      | The number of child nodes of this node. The child
  *          |             | nodes are written immediately following this node.
  *
@@ -62,7 +62,7 @@
 
 #define MEGAHAL_HEADER_LENGTH 10
 
-#define MEGAHAL_TREE_NODE_LENGTH sizeof(uint16_t) * 2 + sizeof(uint32_t) * 2
+#define MEGAHAL_TREE_NODE_LENGTH sizeof(uint16_t) * 3 + sizeof(uint32_t)
 #define MEGAHAL_MIN_TREE_LENGTH  MEGAHAL_TREE_NODE_LENGTH
 
 #define MEGAHAL_FIRST_DICTIONARY_WORD        "<ERROR>"
@@ -234,20 +234,22 @@ brnflip_error brnflip_flip_buffer(
     );
 
     if (returnCode == BRNFLIP_NO_ERROR) {
-        while (position + MEGAHAL_TREE_NODE_LENGTH < dictionaryOffset) {
+        while (position < dictionaryOffset) {
             brnflip_flip_16_in_place(brain + position);
-            brnflip_flip_32_in_place(brain + position + sizeof(uint16_t));
-            brnflip_flip_32_in_place(
-                brain + position + sizeof(uint16_t) + sizeof(uint32_t)
-            );
-            brnflip_flip_16_in_place(
-                brain + position + sizeof(uint16_t) + sizeof(uint32_t) * 2
-            );
+            position += sizeof(uint16_t);
 
-            position += MEGAHAL_TREE_NODE_LENGTH;
+            brnflip_flip_32_in_place(brain + position);
+            position += sizeof(uint32_t);
+
+            brnflip_flip_16_in_place(brain + position);
+            position += sizeof(uint16_t);
+
+            brnflip_flip_16_in_place(brain + position);
+            position += sizeof(uint16_t);
         }
 
         brnflip_flip_32_in_place(brain + position);
+        position += sizeof(uint32_t);
     }
 
     return returnCode;
@@ -315,7 +317,8 @@ brnflip_error brnflip_find_dictionary_offset(
         }
     }
 
-    *dictionaryOffset -= 4;
+    ++*dictionaryOffset;
+    *dictionaryOffset -= sizeof(uint32_t);
 
     if (*dictionaryOffset < 0) {
         return MEGAHAL_INVALID_FILE;
