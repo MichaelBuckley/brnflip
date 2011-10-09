@@ -338,7 +338,7 @@ brnflip_error brnflip_count_words_in_dictionary(
     int32_t* numWordsInDictionary
 )
 {
-    char  wordLength = 0;
+    unsigned char  wordLength = 0;
     off_t position = dictionaryOffset + sizeof(uint32_t);
 
     *numWordsInDictionary = 0;
