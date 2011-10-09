@@ -140,7 +140,7 @@ brnflip_error brnflip_detect_endianess(
         &numWordsInDictionary
     );
 
-    if (flippedDictionaryLength != numWordsInDictionary) {
+    if (flippedDictionaryLength == numWordsInDictionary) {
         assumeFlipped = 1;
     } else if (dictionaryLength != numWordsInDictionary) {
         returnCode = MEGAHAL_INVALID_FILE;
