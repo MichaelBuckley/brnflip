@@ -343,13 +343,13 @@ brnflip_error brnflip_count_words_in_dictionary(
 
     *numWordsInDictionary = 0;
 
-    while(position < brainLength && numWordsInDictionary >= 0){
+    while(position < brainLength && *numWordsInDictionary >= 0){
         wordLength = brain[position];
-        ++numWordsInDictionary;
+        ++*numWordsInDictionary;
         position += wordLength + 1;
     }
 
-    if (numWordsInDictionary <= 0 || position > brainLength + 1) {
+    if (*numWordsInDictionary <= 0 || position > brainLength + 1) {
         return MEGAHAL_INVALID_FILE;
     }
 
