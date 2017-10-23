@@ -1,5 +1,5 @@
 /*
- *  Copyright 2007-2011 Michael Buckley
+ *  Copyright 2007-2017 Michael Buckley
  *
  *  This program is free software; you can redistribute it and/or modify it
  *  under the terms of the GNU General Public License as published by the Free
@@ -18,29 +18,20 @@
 #ifndef __BRNFLIP_H__
 #define __BRNFLIP_H__
 
-#define MEGAHAL_UNKNOWN_INPUT -1
-#define MEGAHAL_UNSUPPORTED_ENDIANESS -2
-
 typedef enum
 {
-    BRNFLIP_NO_ERROR     =  0,
-    MEGAHAL_INVALID_FILE = -1,
+    no_error     =  0,
+    invalid_file = -1,
 } brnflip_error;
 
 typedef enum
 {
-    MEGAHAL_UNKNOWN_FILETYPE = 0,
-    MEGAHAL_BIG_ENDIAN       = 1,
-    MEGAHAL_LITTLE_ENDIAN    = 2
+    unknown_filetype = 0,
+    big_endian       = 1,
+    little_endian    = 2
 } megahal_filetype;
 
-#if BYTE_ORDER == BIG_ENDIAN
-#define NATIVE_MEGAHAL_ENDIANESS MEGAHAL_BIG_ENDIAN
-#elif BYTE_ORDER == LITTLE_ENDIAN
-#define NATIVE_MEGAHAL_ENDIANESS MEGAHAL_LITTLE_ENDIAN
-#else
-#define NATIVE_MEGAHAL_ENDIANESS MEGAHAL_UNKNOWN_FILETYPE
-#endif
+extern const megahal_filetype megahal_native_endianess;
 
 /* This function takes as input a buffer with the contents of a MegaHAL brain
  * file and attempts to determine its endianess, placing the result into
@@ -51,8 +42,8 @@ typedef enum
 
 brnflip_error brnflip_detect_endianess(
     char*             brain,
-    size_t            brainLength,
-    megahal_filetype* outFiletype
+    size_t            brain_length,
+    megahal_filetype* out_file_type
 );
 
 /* This function flips the endianess of a buffer in-place. It must perform one
@@ -62,7 +53,7 @@ brnflip_error brnflip_detect_endianess(
 
 brnflip_error brnflip_flip_buffer(
     char*  brain,
-    size_t brainLength
+    size_t brain_length
 );
 
-#endif
+#endif // __BRNFLIP_H__

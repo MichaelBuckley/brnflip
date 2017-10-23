@@ -1,6 +1,6 @@
-CC=gcc
-CFLAGS=-g -Wall -c
-LD=gcc
+CC=clang
+CFLAGS=-Wall
+LD=clang
 LDFLAGS=
 
 all: brnflip

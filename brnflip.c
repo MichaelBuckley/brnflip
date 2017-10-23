@@ -1,5 +1,5 @@
 /*
- *  Copyright 2007-2011 Michael Buckley
+ *  Copyright 2007-2017 Michael Buckley
  *
  *  This program is free software; you can redistribute it and/or modify it
  *  under the terms of the GNU General Public License as published by the Free
@@ -60,181 +60,216 @@
  * followed by that many characters.
  */
 
-#define MEGAHAL_HEADER_LENGTH 10
+// Constants
 
-#define MEGAHAL_TREE_NODE_LENGTH sizeof(uint16_t) * 3 + sizeof(uint32_t)
-#define MEGAHAL_MIN_TREE_LENGTH  MEGAHAL_TREE_NODE_LENGTH
+#if BYTE_ORDER == BIG_ENDIAN
+const megahal_filetype megahal_native_endianess = big_endian;
+#elif BYTE_ORDER == LITTLE_ENDIAN
+const megahal_filetype megahal_native_endianess = little_endian;
+#else
+const megahal_filetype megahal_native_endianess = unknown_filetype;
+#endif
 
-#define MEGAHAL_FIRST_DICTIONARY_WORD        "<ERROR>"
-#define MEGAHAL_FIRST_DICTIONARY_WORD_LENGTH strlen("<ERROR>")
-#define MEGAHAL_MIN_DICTIONARY_LENGTH        sizeof(uint32_t) * 2 + \
-    MEGAHAL_FIRST_DICTIONARY_WORD_LENGTH
+const char*  cookie                 = "MegaHALv8";
+const size_t cookie_length          = 9;
+const char   model_order            = 5;
+const off_t  header_length          = cookie_length + sizeof(model_order);
 
-#define MEGAHAL_MIN_BRAIN_LENGTH MEGAHAL_HEADER_LENGTH + \
-    MEGAHAL_MIN_TREE_LENGTH * 2 + \
-    MEGAHAL_MIN_DICTIONARY_LENGTH
+const uint32_t num_trees            = 2;
+const off_t    tree_node_length     = sizeof(uint16_t) * 3 + sizeof(uint32_t);
 
-#define MEGAHAL_COOKIE_LENGTH 9
+const char*  firstDictWord          = "<ERROR>";
+const size_t first_dict_word_length = 7;
+
+const size_t min_dict_length = sizeof(uint32_t) +
+    first_dict_word_length + 1;
+
+const size_t min_brain_length = header_length +
+    tree_node_length * num_trees +
+    min_dict_length;
 
 void brnflip_flip_16_in_place(char* x);
 void brnflip_flip_32_in_place(char* x);
 
-brnflip_error brnflip_verify_header(char* brain, size_t brainLength);
+// Function declarations
+
+brnflip_error brnflip_verify_header(char* brain, size_t brain_length);
 
 brnflip_error brnflip_find_dictionary_offset(
     char*  brain,
-    size_t brainLength,
-    off_t* dictionaryOffset
+    size_t brain_length,
+    off_t* dictionary_offset
 );
 
 brnflip_error brnflip_count_words_in_dictionary(
     char*    brain,
-    size_t   brainLength,
-    off_t    dictionaryOffset,
-    int32_t* numWordsInDictionary
+    size_t   brain_length,
+    off_t    dictionary_offset,
+    int32_t* num_words_in_dictionary
 );
 
 brnflip_error brnflip_traverse_tree(
     char*  brain,
-    size_t brainLength,
+    size_t brain_length,
     off_t* position,
-    int    assumeFlipped
+    int    assume_flipped
 );
+
+// Function implementations
 
 brnflip_error brnflip_detect_endianess(
     char*             brain,
-    size_t            brainLength,
-    megahal_filetype* outFiletype
+    size_t            brain_length,
+    megahal_filetype* out_file_type
 )
 {
-    off_t    position                = MEGAHAL_HEADER_LENGTH;
-    off_t    dictionaryOffset        = 0;
-    uint32_t dictionaryLength        = 0;
-    uint32_t flippedDictionaryLength = 0;
-    int32_t  numWordsInDictionary    = 0;
-    int      assumeFlipped           = 0;
+    off_t    position                  = header_length;
+    off_t    dictionary_offset         = 0;
+    uint32_t dictionary_length         = 0;
+    uint32_t flipped_dictionary_length = 0;
+    int32_t  num_words_in_dictionary   = 0;
+    int      assume_flipped            = 0;
 
-    *outFiletype = MEGAHAL_UNKNOWN_FILETYPE;
+    *out_file_type = unknown_filetype;
 
-    brnflip_error returnCode = brnflip_verify_header(
+    brnflip_error return_code = brnflip_verify_header(
         brain,
-        brainLength
+        brain_length
     );
 
-    returnCode = returnCode || brnflip_find_dictionary_offset(
+    return_code = return_code || brnflip_find_dictionary_offset(
         brain,
-        brainLength,
-        &dictionaryOffset
+        brain_length,
+        &dictionary_offset
     );
 
-    if (returnCode == BRNFLIP_NO_ERROR) {
-        memcpy(&dictionaryLength, brain + dictionaryOffset, sizeof(uint32_t));
-        flippedDictionaryLength = dictionaryLength;
-        brnflip_flip_32_in_place((char*) &flippedDictionaryLength);
-    }
+    /* Now that we know where the dictionary starts, we can read in the
+     * dictionary length saved in the file. We can then progress to the end of
+     * the file, counting the actual number of words in the dictionary. If the
+     * two counts differ, we know that the file is not in our native endianess,
+     * but if the counts are the same, we can't make any assumptions, since
+     * there are some numbers with the same representation in both endianesses.
+     */
 
-    returnCode = returnCode || brnflip_count_words_in_dictionary(
-        brain,
-        brainLength,
-        dictionaryOffset,
-        &numWordsInDictionary
-    );
-
-    if (flippedDictionaryLength == numWordsInDictionary) {
-        assumeFlipped = 1;
-    } else if (dictionaryLength != numWordsInDictionary) {
-        returnCode = MEGAHAL_INVALID_FILE;
-    }
-
-
-    if (returnCode == BRNFLIP_NO_ERROR) {
-        returnCode = returnCode || brnflip_traverse_tree(
-            brain,
-            brainLength,
-            &position,
-            assumeFlipped
+    if (return_code == no_error) {
+        memcpy(
+            &dictionary_length,
+            brain + dictionary_offset,
+            sizeof(uint32_t)
         );
 
-        returnCode = returnCode || brnflip_traverse_tree(
+        flipped_dictionary_length = dictionary_length;
+        brnflip_flip_32_in_place((char*) &flipped_dictionary_length);
+    }
+
+    return_code = return_code || brnflip_count_words_in_dictionary(
+        brain,
+        brain_length,
+        dictionary_offset,
+        &num_words_in_dictionary
+    );
+
+    if (flipped_dictionary_length == num_words_in_dictionary) {
+        assume_flipped = 1;
+    } else if (dictionary_length != num_words_in_dictionary) {
+        return_code = invalid_file;
+    }
+
+    /* Next, we traverse the trees. After the trees comes the dictionary, so
+     * if the file is in our assumed endianess, we should end up at our
+     * previously calculated dictionary position.
+     */
+
+    if (return_code == no_error) {
+        return_code = return_code || brnflip_traverse_tree(
             brain,
-            brainLength,
+            brain_length,
             &position,
-            assumeFlipped
+            assume_flipped
+        );
+
+        return_code = return_code || brnflip_traverse_tree(
+            brain,
+            brain_length,
+            &position,
+            assume_flipped
         );
 
 
-        if (returnCode != BRNFLIP_NO_ERROR || position != dictionaryOffset) {
-            // If dictionaryLength is the same number when its endianess is
-            // flipped, we could have gotten assumeFlipped wrong, so try again.
-            if (dictionaryLength == flippedDictionaryLength) {
-                position      = MEGAHAL_HEADER_LENGTH;
-                assumeFlipped = !assumeFlipped;
-                returnCode    = BRNFLIP_NO_ERROR;
+        if (return_code != no_error || position != dictionary_offset) {
+            /* If dictionary_length is the same number when its endianess is
+             * flipped, we could have gotten assume_flipped wrong, so try
+             * traversing the trees again with the opposite assumed endianess.
+             */
+            if (dictionary_length == flipped_dictionary_length) {
+                position      = header_length;
+                assume_flipped = !assume_flipped;
+                return_code    = no_error;
 
-                returnCode = returnCode || brnflip_traverse_tree(
+                return_code = return_code || brnflip_traverse_tree(
                     brain,
-                    brainLength,
+                    brain_length,
                     &position,
-                    assumeFlipped
+                    assume_flipped
                 );
 
-                returnCode = returnCode || brnflip_traverse_tree(
+                return_code = return_code || brnflip_traverse_tree(
                     brain,
-                    brainLength,
+                    brain_length,
                     &position,
-                    assumeFlipped
+                    assume_flipped
                 );
             } else {
-                returnCode = MEGAHAL_INVALID_FILE;
+                return_code = invalid_file;
             }
         }
     }
 
-    if (returnCode == BRNFLIP_NO_ERROR) {
-        // We can now be sure that assumeFlipped is a correct assumption.
-        if (assumeFlipped) {
+    if (return_code == no_error) {
+        // We can now be sure that assume_flipped is a correct assumption.
+        if (assume_flipped) {
             #if BYTE_ORDER == BIG_ENDIAN
-            *outFiletype = MEGAHAL_LITTLE_ENDIAN;
+            *out_file_type = little_endian;
             #elif BYTE_ORDER == LITTLE_ENDIAN
-            *outFiletype = MEGAHAL_BIG_ENDIAN;
+            *out_file_type = big_endian;
             #endif
         } else {
             #if BYTE_ORDER == BIG_ENDIAN
-            *outFiletype = MEGAHAL_BIG_ENDIAN;
+            *out_file_type = big_endian;
             #elif BYTE_ORDER == LITTLE_ENDIAN
-            *outFiletype = MEGAHAL_LITTLE_ENDIAN;
+            *out_file_type = little_endian;
             #endif
         }
     }
 
-    return returnCode;
+    return return_code;
 }
 
 /* This function performs the flipping of the MegaHALv8 brain. Since the
- * dictionary must not be flipped, this function requires the start position
- * of the dictonary.
+ * dictionary must not be flipped, this function finds the start position of
+ * the dictonary.
  */
 brnflip_error brnflip_flip_buffer(
     char*  brain,
-    size_t brainLength
+    size_t brain_length
 )
 {
-    off_t position         = MEGAHAL_HEADER_LENGTH;
-    off_t dictionaryOffset = 0;
+    off_t position         = header_length;
+    off_t dictionary_offset = 0;
 
-    brnflip_error returnCode = brnflip_verify_header(
+    brnflip_error return_code = brnflip_verify_header(
         brain,
-        brainLength
+        brain_length
     );
 
-    returnCode = returnCode || brnflip_find_dictionary_offset(
+    return_code = return_code || brnflip_find_dictionary_offset(
         brain,
-        brainLength,
-        &dictionaryOffset
+        brain_length,
+        &dictionary_offset
     );
 
-    if (returnCode == BRNFLIP_NO_ERROR) {
-        while (position < dictionaryOffset) {
+    if (return_code == no_error) {
+        while (position < dictionary_offset) {
             brnflip_flip_16_in_place(brain + position);
             position += sizeof(uint16_t);
 
@@ -252,150 +287,148 @@ brnflip_error brnflip_flip_buffer(
         position += sizeof(uint32_t);
     }
 
-    return returnCode;
+    return return_code;
 }
 
-/* This function verifies the header of a brain file, returning BRNFLIP_NO_ERROR
+/* This function verifies the header of a brain file, returning no_error
  * if the header is valid, and BRNFLIP_INVALID_INPUT otherwise.
  */
-brnflip_error brnflip_verify_header(char* brain, size_t brainLength)
+brnflip_error brnflip_verify_header(char* brain, size_t brain_length)
 {
-    char cookie[MEGAHAL_COOKIE_LENGTH + 1];
+    char cookie[cookie_length + 1] = { 0 };
 
-    if (brainLength < MEGAHAL_MIN_BRAIN_LENGTH || brain[9] != 5) {
-        return MEGAHAL_INVALID_FILE;
+    if (brain_length < min_brain_length ||
+        brain[cookie_length] != model_order) {
+        return invalid_file;
     }
 
-    memset(cookie, 0, MEGAHAL_COOKIE_LENGTH + 1);
-    memcpy(cookie, brain, MEGAHAL_COOKIE_LENGTH);
+    memcpy(cookie, brain, cookie_length);
 
-    if (strcmp(cookie, "MegaHALv8") != 0) {
-        return MEGAHAL_INVALID_FILE;
+    if (strcmp(cookie, cookie) != 0) {
+        return invalid_file;
     }
 
-    return BRNFLIP_NO_ERROR;
+    return no_error;
 }
 
-/* This function finds the start of the MegaHALv8 dictionary. It takes advantage
- * of the fact that the dictionary starts with "<ERROR>". If the start is found,
- * it returns BRNFLIP_NO_ERROR, but if not, returns BRNFLIP_INVALID_FILE.
+/* This function finds the start of the MegaHALv8 dictionary. It takes
+ * advantage of the fact that the dictionary starts with "<ERROR>". If the
+ * start is found, it returns no_error, but if not, returns
+ * BRNFLIP_INVALID_FILE.
  */
 
 brnflip_error brnflip_find_dictionary_offset(
     char*  brain,
-    size_t brainLength,
-    off_t* dictionaryOffset
+    size_t brain_length,
+    off_t* dictionary_offset
 )
 {
     char c;
     int foundStart = 0;
 
-    *dictionaryOffset = brainLength - MEGAHAL_FIRST_DICTIONARY_WORD_LENGTH - 2;
-    c = brain[*dictionaryOffset];
+    *dictionary_offset = brain_length - first_dict_word_length - 1;
+    c = brain[*dictionary_offset];
 
-    while( *dictionaryOffset >= 0 && !foundStart){
-        /* Search for the start of the dictionary */
-        if (c == MEGAHAL_FIRST_DICTIONARY_WORD_LENGTH) {
-            char word[MEGAHAL_FIRST_DICTIONARY_WORD_LENGTH + 1];
-            memset(word, 0, MEGAHAL_FIRST_DICTIONARY_WORD_LENGTH + 1);
+    while (*dictionary_offset >= 0 && !foundStart) {
+        // Search for the start of the dictionary
+        if (c == first_dict_word_length) {
+            char word[first_dict_word_length + 1] = { 0 };
+
             memcpy(
                 word,
-                &brain[*dictionaryOffset + 1],
-                MEGAHAL_FIRST_DICTIONARY_WORD_LENGTH
+                &brain[*dictionary_offset + 1],
+                first_dict_word_length
             );
 
-            if(strncmp(
-                word,
-                MEGAHAL_FIRST_DICTIONARY_WORD, MEGAHAL_FIRST_DICTIONARY_WORD_LENGTH
-            ) == 0){
+            if(strncmp(word, firstDictWord, first_dict_word_length) == 0){
                 foundStart = 1;
             }
         }
-        if(*dictionaryOffset > 0){
-            --*dictionaryOffset;
-            c = brain[*dictionaryOffset];
+        if(*dictionary_offset > 0){
+            --*dictionary_offset;
+            c = brain[*dictionary_offset];
         }
     }
 
-    ++*dictionaryOffset;
-    *dictionaryOffset -= sizeof(uint32_t);
+    ++*dictionary_offset;
+    *dictionary_offset -= sizeof(uint32_t);
 
-    if (*dictionaryOffset < 0) {
-        return MEGAHAL_INVALID_FILE;
+    if (*dictionary_offset < 0) {
+        return invalid_file;
     }
 
-    return BRNFLIP_NO_ERROR;
+    return no_error;
 }
 
 /* This function counts the number of words in the dictionary, returning
- * MEGAHAL_INVALID_FILE if there are no words in the dictionary, and
- * BRNFLIP_NO_ERROR otherwise.
+ * invalid_file if there are no words in the dictionary, and
+ * no_error otherwise.
  */
 brnflip_error brnflip_count_words_in_dictionary(
     char*    brain,
-    size_t   brainLength,
-    off_t    dictionaryOffset,
-    int32_t* numWordsInDictionary
+    size_t   brain_length,
+    off_t    dictionary_offset,
+    int32_t* num_words_in_dictionary
 )
 {
     unsigned char  wordLength = 0;
-    off_t position = dictionaryOffset + sizeof(uint32_t);
+    off_t position = dictionary_offset + sizeof(uint32_t);
 
-    *numWordsInDictionary = 0;
+    *num_words_in_dictionary = 0;
 
-    while(position < brainLength && *numWordsInDictionary >= 0){
+    while(position < brain_length && *num_words_in_dictionary >= 0){
         wordLength = brain[position];
-        ++*numWordsInDictionary;
+        ++*num_words_in_dictionary;
         position += wordLength + 1;
     }
 
-    if (*numWordsInDictionary <= 0 || position > brainLength + 1) {
-        return MEGAHAL_INVALID_FILE;
+    if (*num_words_in_dictionary <= 0 || position > brain_length + 1) {
+        return invalid_file;
     }
 
-    return BRNFLIP_NO_ERROR;
+    return no_error;
 }
 
-/* This function attempts to traverse a MegaHALv8 tree. If the tree extends past
- * bound, the function returns MEGAHAL_INVALID_FILE, otherwise, it advances
- * posiiton to the end of the tree and returns BRNFLIP_NO_ERROR.
+/* This function attempts to traverse a MegaHALv8 tree. If the tree extends
+ * past the brain length, the function returns invalid_file, otherwise,
+ * it advances position to the end of the tree and returns no_error.
  */
 brnflip_error brnflip_traverse_tree(
     char*  brain,
-    size_t brainLength,
+    size_t brain_length,
     off_t* position,
-    int    assumeFlipped
+    int    assume_flipped
 )
 {
-    uint16_t numBranches = 0;
+    uint16_t num_branches = 0;
 
-    brnflip_error returnCode = BRNFLIP_NO_ERROR;
+    brnflip_error return_code = no_error;
 
-    if (*position + MEGAHAL_TREE_NODE_LENGTH < brainLength) {
+    if (*position + tree_node_length < brain_length) {
         memcpy(
-            &numBranches,
-            brain + *position + MEGAHAL_TREE_NODE_LENGTH - sizeof(uint16_t),
+            &num_branches,
+            brain + *position + tree_node_length - sizeof(uint16_t),
             sizeof(uint16_t)
         );
 
-        if (assumeFlipped) {
-            brnflip_flip_16_in_place((char*) &numBranches);
+        if (assume_flipped) {
+            brnflip_flip_16_in_place((char*) &num_branches);
         }
 
-        *position += MEGAHAL_TREE_NODE_LENGTH;
+        *position += tree_node_length;
     }
 
     uint32_t i;
-    for (i = 0; i < numBranches && returnCode == BRNFLIP_NO_ERROR; ++i) {
-        returnCode = returnCode || brnflip_traverse_tree(
+    for (i = 0; i < num_branches && return_code == no_error; ++i) {
+        return_code = return_code || brnflip_traverse_tree(
             brain,
-            brainLength,
+            brain_length,
             position,
-            assumeFlipped
+            assume_flipped
         );
     }
 
-    return returnCode;
+    return return_code;
 }
 
 void brnflip_flip_16_in_place(char* x)
